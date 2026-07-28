@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ecommerce
+    username: postgres
+    password: 147258
+  jpa:
+    hibernate:
+      ddl-auto: validate   # important: never use "update" or "create" - flyway already manages the schema
+    show-sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration

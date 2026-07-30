@@ -1,12 +1,12 @@
 # MaltaLand Store — Frontend
 
-Cliente React + Vite para la tienda MaltaLand.
+React + Vite client for the MaltaLand ecommerce API.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Variables de entorno en `.env`:
-- `VITE_API_URL` — URL del backend (default: `http://localhost:8080/api`)
+Environment variables (`.env`):
+- `VITE_API_URL` — Backend base URL (defaults to `http://localhost:8080/api`)
 - `VITE_STRIPE_PUBLISHABLE_KEY` — Stripe publishable key (sandbox)

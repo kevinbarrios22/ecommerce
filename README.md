@@ -1,55 +1,56 @@
-# 🏪 MaltaLand Store — Ecommerce
+# MaltaLand Store
 
-Plataforma de ecommerce completa con **Spring Boot** (backend) y **React + Vite** (frontend).
+Full-stack ecommerce app built with Spring Boot and React.
 
 ## Stack
 
-| Capa       | Tecnología                              |
-| ---------- | --------------------------------------- |
-| Backend    | Java 17, Spring Boot 3.x, Spring Security, Spring Data JPA |
-| Frontend   | React 19, React Router 7, Vite 8, Axios |
-| Base de datos | PostgreSQL 18                         |
-| Pagos      | Stripe (sandbox)                        |
-| Migraciones | Flyway                                 |
+| Layer       | Tech                                        |
+|-------------|---------------------------------------------|
+| Backend     | Java 17, Spring Boot 3.x, Spring Security, Spring Data JPA |
+| Frontend    | React 19, React Router 7, Vite 8, Axios     |
+| Database    | PostgreSQL 18                                |
+| Payments    | Stripe                                       |
+| Migrations  | Flyway                                       |
 
-## Funcionalidades incluidas
+## Features
 
-### Storefront (tienda pública)
-- Catálogo de productos con búsqueda y paginación
-- Detalle de producto con precio, stock y descripción
-- Carrito de compras (contexto global)
-- Checkout con formulario de envío y pago vía Stripe
-- Confirmación de orden post-pago
-- Autenticación: registro e inicio de sesión
+### Storefront
+- Product catalog with search and pagination
+- Product detail page with pricing, stock info and description
+- Shopping cart (global context, persisted across sessions)
+- Checkout flow with Stripe payment integration
+- Order confirmation after successful payment
+- User registration and login
 
-### Panel de administración (`/admin`)
-- **Dashboard** con KPIs: órdenes hoy, esta semana, ingresos totales, stock bajo, órdenes pendientes
-- **Gestión de productos**: CRUD completo, activar/desactivar, % IVA, stock disponible y reservado
-- **Gestión de órdenes**: filtros por estado/email/fecha, vista detalle, cambio de estado con validación de transiciones (PENDING → PAID → SHIPPED → DELIVERED, cualquier estado → CANCELLED)
-- **Gestión de categorías**: CRUD completo
-- **Usuarios admin**: endpoint secreto para crear admins adicionales (`X-Admin-Secret`)
-- Sidebar de navegación, diseño responsive
+### Admin Panel (`/admin`)
+- Dashboard with KPIs: orders today, orders this week, total revenue, low stock count, pending orders
+- Product management: full CRUD, activate/deactivate toggle, VAT percentage, available vs reserved stock
+- Order management: filter by status / email / date range, order detail view, status transitions with validation (PENDING → PAID → SHIPPED → DELIVERED, any → CANCELLED)
+- Category management: full CRUD with slug auto-generation
+- Admin user creation via secret endpoint (`X-Admin-Secret` header)
+- Responsive sidebar layout
 
-### Seguridad
-- JWT con Spring Security + filtro personalizado
-- Roles ADMIN y USER
-- Endpoints protegidos por rol (backend)
-- Interceptor Axios con token desde localStorage
-- Semilla automática de admin en `DataSeeder.java`
+### Security
+- JWT authentication with custom Spring Security filter
+- ADMIN and USER role separation
+- Backend-enforced authorization (frontend guards are secondary)
+- Axios interceptor reads token from localStorage on every request
+- Admin user auto-seeded on first startup via `DataSeeder.java`
 
-## Cómo ejecutar
+## Getting Started
 
-### Prerrequisitos
+### Prerequisites
 - Java 17+
 - Node.js 18+
-- PostgreSQL 18+ corriendo en `localhost:5432`
+- PostgreSQL 18+ running on `localhost:5432`
 
 ### Backend
 ```bash
 cd backend
-# Configurar variables de entorno o usar defaults en application.yaml
 ./mvnw spring-boot:run
 ```
+
+The app will create the admin account automatically on startup. Defaults are in `application.yaml` — override via environment variables for production.
 
 ### Frontend
 ```bash
@@ -58,35 +59,38 @@ npm install
 npm run dev
 ```
 
-### Variables de entorno (`.env` / `application.yaml`)
-| Variable | Descripción |
-|---|---|
-| `DB_PASSWORD` | Password de PostgreSQL |
-| `JWT_SECRET` | Secreto para firmar JWT |
-| `STRIPE_SECRET_KEY` | Stripe secret key (sandbox) |
-| `ADMIN_SECRET_KEY` | Secreto para endpoint de registro admin |
+### Environment Variables
 
-## Estructura del proyecto
+| Variable               | Description                    |
+|------------------------|--------------------------------|
+| `DB_PASSWORD`          | PostgreSQL password             |
+| `JWT_SECRET`           | Secret used to sign JWT tokens  |
+| `STRIPE_SECRET_KEY`    | Stripe secret key (sandbox)     |
+| `ADMIN_SECRET_KEY`     | Secret for admin registration   |
+
+Copy `.env.example` to `.env` and fill in the values. The frontend defaults to `http://localhost:8080/api`.
+
+## Project Structure
 
 ```
 ecommerce/
 ├── backend/
 │   └── src/main/java/com/maltaland/ecommerce/
 │       ├── config/DataSeeder.java
-│       ├── controller/     (Auth, Order, Product, Category, Dashboard)
+│       ├── controller/         # Auth, Order, Product, Category, Dashboard
 │       ├── dto/
-│       ├── entity/         (Order, Product, User, Category, OrderItem, Coupon)
+│       ├── entity/             # Order, Product, User, Category, OrderItem, Coupon
 │       ├── mapper/
 │       ├── repository/
-│       ├── security/       (JwtAuthFilter, SecurityConfig, JwtUtil)
+│       ├── security/           # JwtAuthFilter, SecurityConfig, JwtUtil
 │       └── service/
 └── frontend/
     └── src/
-        ├── app/            (router, guards)
+        ├── app/                # Router, guards
         ├── features/
-        │   ├── admin/      (dashboard, orders, products, categories)
-        │   ├── auth/       (login, register)
-        │   └── storefront/ (products, cart, checkout)
-        ├── layouts/        (AdminLayout, StorefrontLayout)
-        └── shared/         (api, contexts, components)
+        │   ├── admin/          # Dashboard, orders, products, categories
+        │   ├── auth/           # Login, register
+        │   └── storefront/     # Products, cart, checkout
+        ├── layouts/            # AdminLayout, StorefrontLayout
+        └── shared/             # API client, contexts, components
 ```

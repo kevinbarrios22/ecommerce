@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/ecommerce
     username: postgres
-    password: 147258
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate   # important: never use "update" or "create" - flyway already manages the schema
@@ -12,5 +12,8 @@ spring:
     locations: classpath:db/migration
 
 jwt:
-  secret: maltaLandSecretKeyForJwtTokensMustBeAtLeast256BitsLong2024
+  secret: ${JWT_SECRET}
   expiration: 86400000
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY}

@@ -1,14 +1,21 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../context/CartContext';
+import PaymentForm from '../components/PaymentForm';
 import api from '../services/api';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 function Checkout() {
     const navigate = useNavigate();
     const { items, totalPrice, clearCart } = useCart();
     const [form, setForm] = useState({ customerName: '', customerEmail: '' });
-    const [submitting, setSubmitting] = useState(false);
+    const [step, setStep] = useState('form');
+    const [clientSecret, setClientSecret] = useState(null);
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
 
     if (items.length === 0) {
         return (
@@ -20,60 +27,69 @@ function Checkout() {
         );
     }
 
-    const handleSubmit = (e) => {
+    const handleFormSubmit = async (e) => {
         e.preventDefault();
         if (!form.customerName.trim() || !form.customerEmail.trim()) return;
 
-        setSubmitting(true);
+        setLoading(true);
         setError(null);
 
-        const payload = {
-            customerName: form.customerName,
-            customerEmail: form.customerEmail,
-            items: items.map((item) => ({
-                productId: item.id,
-                quantity: item.quantity,
-            })),
-        };
+        try {
+            const payload = {
+                items: items.map((item) => ({
+                    productId: item.id,
+                    quantity: item.quantity,
+                })),
+            };
 
-        api.post('/orders', payload)
-            .then((res) => {
-                clearCart();
-                navigate('/order-confirmation', { state: { order: res.data } });
-            })
-            .catch((err) => {
-                setError(err.response?.data?.message || err.message);
-                setSubmitting(false);
-            });
+            const res = await api.post('/payments/create-payment-intent', payload);
+            setClientSecret(res.data.clientSecret);
+            setStep('payment');
+        } catch (err) {
+            setError(err.response?.data?.message || err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
         <div className="checkout">
             <h1 className="page-title">Checkout</h1>
             <div className="checkout__layout">
-                <form className="checkout__form" onSubmit={handleSubmit}>
-                    <h2>Customer details</h2>
-                    <input
-                        className="search-input"
-                        type="text"
-                        placeholder="Full name"
-                        value={form.customerName}
-                        onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-                        required
-                    />
-                    <input
-                        className="search-input"
-                        type="email"
-                        placeholder="Email address"
-                        value={form.customerEmail}
-                        onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
-                        required
-                    />
-                    {error && <p className="error">{error}</p>}
-                    <button className="btn" type="submit" disabled={submitting}>
-                        {submitting ? 'Processing...' : `Pay €${totalPrice.toFixed(2)}`}
-                    </button>
-                </form>
+                {step === 'form' ? (
+                    <form className="checkout__form" onSubmit={handleFormSubmit}>
+                        <h2>Customer details</h2>
+                        <input
+                            className="search-input"
+                            type="text"
+                            placeholder="Full name"
+                            value={form.customerName}
+                            onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+                            required
+                        />
+                        <input
+                            className="search-input"
+                            type="email"
+                            placeholder="Email address"
+                            value={form.customerEmail}
+                            onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
+                            required
+                        />
+                        {error && <p className="error">{error}</p>}
+                        <button className="btn" type="submit" disabled={loading}>
+                            {loading ? 'Preparing payment...' : `Pay €${totalPrice.toFixed(2)}`}
+                        </button>
+                    </form>
+                ) : clientSecret ? (
+                    <Elements stripe={stripePromise} options={{ clientSecret }}>
+                        <PaymentForm
+                            items={items}
+                            form={form}
+                            totalPrice={totalPrice}
+                            clearCart={clearCart}
+                        />
+                    </Elements>
+                ) : null}
                 <div className="checkout__summary">
                     <h2>Order summary</h2>
                     {items.map((item) => (

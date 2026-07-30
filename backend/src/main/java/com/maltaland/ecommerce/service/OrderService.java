@@ -11,6 +11,8 @@ import com.maltaland.ecommerce.mapper.OrderMapper;
 import com.maltaland.ecommerce.repository.OrderRepository;
 import com.maltaland.ecommerce.repository.ProductRepository;
 import com.maltaland.ecommerce.repository.UserRepository;
+import com.stripe.exception.StripeException;
+import com.stripe.model.PaymentIntent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,10 +44,27 @@ public class OrderService {
                     return userRepository.save(newUser);
                 });
 
+        if (dto.stripePaymentIntentId() != null) {
+            try {
+                PaymentIntent intent = PaymentIntent.retrieve(dto.stripePaymentIntentId());
+                if (!"succeeded".equals(intent.getStatus())) {
+                    throw new IllegalStateException("Payment has not been completed");
+                }
+            } catch (StripeException e) {
+                throw new RuntimeException("Failed to verify payment: " + e.getMessage(), e);
+            }
+        }
+
+        String status = dto.stripePaymentIntentId() != null ? "PAID" : "PENDING";
+
         Order order = new Order();
         order.setUser(user);
         order.setCreatedAt(LocalDateTime.now());
-        order.setStatus("PENDING");
+        order.setStatus(status);
+        order.setStripePaymentIntentId(dto.stripePaymentIntentId());
+        if ("PAID".equals(status)) {
+            order.setPaidAt(LocalDateTime.now());
+        }
 
         List<OrderItem> items = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;

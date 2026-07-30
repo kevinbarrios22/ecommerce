@@ -11,7 +11,7 @@ public record ProductResponseDTO(
     Integer availableStock,
     String categoryName,
     Long categoryId,
-    String imagenUrl,
+    String imageUrl,
     Boolean active
 ){
 }

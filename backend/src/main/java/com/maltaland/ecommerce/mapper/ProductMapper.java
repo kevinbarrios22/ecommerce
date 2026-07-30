@@ -27,7 +27,7 @@ public class ProductMapper {
                 product.getDescription(),
                 product.getPrice(),
                 priceWithVat,
-                product.getStock(),
+                product.getStock() - product.getReservedStock(),
                 product.getCategory().getName(),
                 product.getCategory().getId(),
                 product.getImageUrl(),

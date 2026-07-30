@@ -14,3 +14,11 @@ Thumbs.db
 
 ### Generated files ###
 effective-pom*.xml
+
+### Node ###
+node_modules/
+frontend/node_modules/
+
+### Build ###
+backend/target/
+frontend/dist/

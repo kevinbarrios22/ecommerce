@@ -27,6 +27,11 @@ public record ProductRequestDTO(
 
         String imageUrl,
 
+        Integer vatPercentage,
+
+        @PositiveOrZero(message = "Active flag required")
+        Boolean active,
+
         LocalDateTime releaseDate
 ) {
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '../services/api';
+import api from '../../../shared/api/api';
 
 function Categories() {
     const [categories, setCategories] = useState([]);

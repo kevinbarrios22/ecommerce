@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
-import { useCart } from '../context/CartContext';
-import PaymentForm from '../components/PaymentForm';
-import api from '../services/api';
+import { useCart } from '../../../shared/contexts/CartContext';
+import PaymentForm from './PaymentForm';
+import api from '../../../shared/api/api';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 function Checkout() {
-    const navigate = useNavigate();
     const { items, totalPrice, clearCart } = useCart();
     const [form, setForm] = useState({ customerName: '', customerEmail: '' });
     const [step, setStep] = useState('form');

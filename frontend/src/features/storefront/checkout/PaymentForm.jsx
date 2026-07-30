@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api from '../../../shared/api/api';
 
 function PaymentForm({ items, form, totalPrice, clearCart }) {
     const stripe = useStripe();

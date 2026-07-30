@@ -8,11 +8,13 @@ import com.maltaland.ecommerce.repository.UserRepository;
 import com.maltaland.ecommerce.security.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,6 +29,9 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+
+    @Value("${app.admin-secret}")
+    private String adminSecret;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody AuthRequestDTO dto) {
@@ -45,7 +50,32 @@ public class AuthController {
         String token = jwtUtil.generate(saved.getId(), saved.getEmail());
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new AuthResponseDTO(token, saved.getId(), saved.getName(), saved.getEmail()));
+                .body(new AuthResponseDTO(token, saved.getId(), saved.getName(), saved.getEmail(), saved.getRole()));
+    }
+
+    @PostMapping("/register-admin")
+    public ResponseEntity<AuthResponseDTO> registerAdmin(
+            @Valid @RequestBody AuthRequestDTO dto,
+            @RequestHeader("X-Admin-Secret") String secret) {
+        if (!adminSecret.equals(secret)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        if (userRepository.findByEmail(dto.email()).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+        }
+
+        User user = new User();
+        user.setName(dto.name());
+        user.setEmail(dto.email());
+        user.setPassword(passwordEncoder.encode(dto.password()));
+        user.setRole("ADMIN");
+        user.setRegisteredAt(LocalDateTime.now());
+
+        User saved = userRepository.save(user);
+        String token = jwtUtil.generate(saved.getId(), saved.getEmail());
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new AuthResponseDTO(token, saved.getId(), saved.getName(), saved.getEmail(), saved.getRole()));
     }
 
     @PostMapping("/login")
@@ -59,6 +89,6 @@ public class AuthController {
 
         String token = jwtUtil.generate(user.getId(), user.getEmail());
         return ResponseEntity.ok(
-                new AuthResponseDTO(token, user.getId(), user.getName(), user.getEmail()));
+                new AuthResponseDTO(token, user.getId(), user.getName(), user.getEmail(), user.getRole()));
     }
 }

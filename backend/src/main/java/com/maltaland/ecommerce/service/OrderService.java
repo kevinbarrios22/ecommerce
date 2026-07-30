@@ -18,9 +18,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -28,10 +32,66 @@ import java.util.UUID;
 @Transactional
 public class OrderService {
 
+    private static final Set<String> VALID_TRANSITIONS = Set.of(
+            "PENDING->PAID", "PAID->SHIPPED", "SHIPPED->DELIVERED",
+            "PENDING->CANCELLED", "PAID->CANCELLED", "SHIPPED->CANCELLED"
+    );
+
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final OrderMapper orderMapper;
+
+    public List<OrderResponseDTO> findAll(String status, String email, LocalDate start, LocalDate end) {
+        LocalDateTime startDt = start != null ? start.atStartOfDay() : null;
+        LocalDateTime endDt = end != null ? end.atTime(LocalTime.MAX) : null;
+        return orderRepository.findByFilters(status, email, startDt, endDt).stream()
+                .map(orderMapper::toOrderResponseDTO)
+                .toList();
+    }
+
+    public OrderResponseDTO findById(Long id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
+        return orderMapper.toOrderResponseDTO(order);
+    }
+
+    public OrderResponseDTO updateStatus(Long id, String newStatus) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
+
+        String transition = order.getStatus() + "->" + newStatus;
+        if (!VALID_TRANSITIONS.contains(transition)) {
+            throw new IllegalStateException("Cannot transition from " + order.getStatus() + " to " + newStatus);
+        }
+
+        order.setStatus(newStatus);
+        if ("PAID".equals(newStatus) && order.getPaidAt() == null) {
+            order.setPaidAt(LocalDateTime.now());
+        }
+
+        return orderMapper.toOrderResponseDTO(orderRepository.save(order));
+    }
+
+    public Map<String, Object> getDashboardStats() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime todayStart = today.atStartOfDay();
+        LocalDateTime weekStart = today.minusDays(7).atStartOfDay();
+
+        long ordersToday = orderRepository.countByCreatedAtAfter(todayStart);
+        long ordersThisWeek = orderRepository.countByCreatedAtAfter(weekStart);
+        BigDecimal revenue = orderRepository.totalRevenue();
+        long pendingOrders = orderRepository.countByStatus("PENDING");
+        long lowStockProducts = productRepository.countByStockLessThan(5);
+
+        return Map.of(
+                "ordersToday", ordersToday,
+                "ordersThisWeek", ordersThisWeek,
+                "revenue", revenue,
+                "lowStockProducts", lowStockProducts,
+                "pendingOrders", pendingOrders
+        );
+    }
 
     public OrderResponseDTO create(OrderRequestDTO dto) {
         User user = userRepository.findByEmail(dto.customerEmail())

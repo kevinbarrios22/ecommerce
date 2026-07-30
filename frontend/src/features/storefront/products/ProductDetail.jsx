@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../services/api';
-import { useCart } from '../context/CartContext';
+import api from '../../../shared/api/api';
+import { useCart } from '../../../shared/contexts/CartContext';
 
 function ProductDetail() {
     const { id } = useParams();

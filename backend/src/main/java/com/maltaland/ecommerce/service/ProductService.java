@@ -50,6 +50,8 @@ public class ProductService {
         product.setStock(dto.stock());
         product.setCategory(category);
         product.setImageUrl(dto.imageUrl());
+        if (dto.vatPercentage() != null) product.setVatPercentage(dto.vatPercentage());
+        if (dto.active() != null) product.setActive(dto.active());
         product.setReleaseDate(dto.releaseDate());
 
         Product saved = productRepository.save(product);
@@ -66,6 +68,8 @@ public class ProductService {
         product.setStock(dto.stock());
         product.setCategory(category);
         product.setImageUrl(dto.imageUrl());
+        if (dto.vatPercentage() != null) product.setVatPercentage(dto.vatPercentage());
+        if (dto.active() != null) product.setActive(dto.active());
         product.setReleaseDate(dto.releaseDate());
 
         Product updated = productRepository.save(product);
@@ -74,8 +78,14 @@ public class ProductService {
 
     public void delete(Long id) {
         Product product = findProductOrThrow(id);
-        product.setActive(false); // soft delete: nunca borramos físicamente
+        product.setActive(false);
         productRepository.save(product);
+    }
+
+    public ProductResponseDTO toggleActive(Long id) {
+        Product product = findProductOrThrow(id);
+        product.setActive(!product.getActive());
+        return productMapper.toProductResponseDTO(productRepository.save(product));
     }
 
     private Product findProductOrThrow(Long id) {

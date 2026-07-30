@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../shared/contexts/AuthContext';
 
-function Register() {
-    const navigate = useNavigate();
-    const { register } = useAuth();
-    const [form, setForm] = useState({ name: '', email: '', password: '' });
+function Login() {
+    const { login } = useAuth();
+    const [form, setForm] = useState({ email: '', password: '' });
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -14,8 +13,9 @@ function Register() {
         setLoading(true);
         setError(null);
         try {
-            await register(form.name, form.email, form.password);
-            navigate('/');
+            const data = await login(form.email, form.password);
+            localStorage.setItem('user', JSON.stringify(data));
+            window.location.href = data.role === 'ADMIN' ? '/admin' : '/';
         } catch (err) {
             setError(err.response?.data?.message || err.message);
         } finally {
@@ -25,16 +25,8 @@ function Register() {
 
     return (
         <div className="auth-page">
-            <h1 className="page-title">Register</h1>
+            <h1 className="page-title">Login</h1>
             <form className="auth-form" onSubmit={handleSubmit}>
-                <input
-                    className="search-input"
-                    type="text"
-                    placeholder="Full name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                />
                 <input
                     className="search-input"
                     type="email"
@@ -46,22 +38,21 @@ function Register() {
                 <input
                     className="search-input"
                     type="password"
-                    placeholder="Password (6+ characters)"
+                    placeholder="Password"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                     required
-                    minLength={6}
                 />
                 {error && <p className="auth-error">{error}</p>}
                 <button className="btn" type="submit" disabled={loading}>
-                    {loading ? 'Creating account...' : 'Register'}
+                    {loading ? 'Logging in...' : 'Login'}
                 </button>
                 <p className="auth-link">
-                    Already have an account? <Link to="/login">Login</Link>
+                    Don't have an account? <Link to="/register">Register</Link>
                 </p>
             </form>
         </div>
     );
 }
 
-export default Register;
+export default Login;

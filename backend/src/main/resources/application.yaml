@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/ecommerce
     username: postgres
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:147258}
   jpa:
     hibernate:
       ddl-auto: validate   # important: never use "update" or "create" - flyway already manages the schema
@@ -12,8 +12,11 @@ spring:
     locations: classpath:db/migration
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:dev-jwt-secret-key-at-least-256-bits-long-for-hs256}
   expiration: 86400000
 
 stripe:
-  secret-key: ${STRIPE_SECRET_KEY}
+  secret-key: ${STRIPE_SECRET_KEY:sk_test_dummy}
+
+app:
+  admin-secret: ${ADMIN_SECRET_KEY:admin-secret-2024}

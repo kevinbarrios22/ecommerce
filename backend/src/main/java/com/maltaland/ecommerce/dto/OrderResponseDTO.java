@@ -8,6 +8,10 @@ public record OrderResponseDTO(
         Long id,
         String status,
         BigDecimal total,
+        String customerName,
+        String customerEmail,
+        String stripePaymentIntentId,
+        LocalDateTime paidAt,
         LocalDateTime createdAt,
         List<OrderItemResponse> items
 ) {

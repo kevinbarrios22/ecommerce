@@ -20,6 +20,10 @@ public class OrderMapper {
                 order.getId(),
                 order.getStatus(),
                 order.getTotal(),
+                order.getUser().getName(),
+                order.getUser().getEmail(),
+                order.getStripePaymentIntentId(),
+                order.getPaidAt(),
                 order.getCreatedAt(),
                 itemResponses
         );

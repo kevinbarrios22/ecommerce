@@ -10,3 +10,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+jwt:
+  secret: maltaLandSecretKeyForJwtTokensMustBeAtLeast256BitsLong2024
+  expiration: 86400000

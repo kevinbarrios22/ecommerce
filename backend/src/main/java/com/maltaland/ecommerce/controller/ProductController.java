@@ -19,8 +19,10 @@ public class ProductController {
     private final ProductService productService;
 
     @GetMapping
-    public ResponseEntity<Page<ProductResponseDTO>> list(Pageable pageable) {
-        return ResponseEntity.ok(productService.list(pageable));
+    public ResponseEntity<Page<ProductResponseDTO>> list(
+            @RequestParam(required = false) String name,
+            Pageable pageable) {
+        return ResponseEntity.ok(productService.list(name, pageable));
     }
 
     @GetMapping("/{id}")

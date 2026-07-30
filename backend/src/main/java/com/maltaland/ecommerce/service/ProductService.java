@@ -25,7 +25,11 @@ public class ProductService {
     private final ProductMapper productMapper;
 
     @Transactional(readOnly = true)
-    public Page<ProductResponseDTO> list(Pageable pageable) {
+    public Page<ProductResponseDTO> list(String name, Pageable pageable) {
+        if (name != null && !name.isBlank()) {
+            return productRepository.findByNameContainingIgnoreCase(name, pageable)
+                    .map(productMapper::toProductResponseDTO);
+        }
         return productRepository.findAll(pageable)
                 .map(productMapper::toProductResponseDTO);
     }

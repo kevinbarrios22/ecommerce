@@ -11,6 +11,7 @@ Thumbs.db
 ### Environment ###
 .env
 .env.local
+run-local.ps1
 
 ### Generated files ###
 effective-pom*.xml

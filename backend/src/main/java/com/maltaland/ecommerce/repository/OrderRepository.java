@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
@@ -18,6 +19,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     long countByCreatedAtAfter(LocalDateTime after);
 
     long countByStatus(String status);
+
+    Optional<Order> findByStripePaymentIntentId(String stripePaymentIntentId);
+
+    List<Order> findByStatusAndCreatedAtBefore(String status, LocalDateTime createdAt);
 
     @Query("SELECT COALESCE(SUM(o.total), 0) FROM Order o WHERE o.status <> 'CANCELLED'")
     BigDecimal totalRevenue();

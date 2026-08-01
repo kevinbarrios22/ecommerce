@@ -13,6 +13,7 @@ function Checkout() {
     const [form, setForm] = useState({ customerName: '', customerEmail: '' });
     const [step, setStep] = useState('form');
     const [clientSecret, setClientSecret] = useState(null);
+    const [orderId, setOrderId] = useState(null);
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -35,6 +36,8 @@ function Checkout() {
 
         try {
             const payload = {
+                customerName: form.customerName,
+                customerEmail: form.customerEmail,
                 items: items.map((item) => ({
                     productId: item.id,
                     quantity: item.quantity,
@@ -43,6 +46,7 @@ function Checkout() {
 
             const res = await api.post('/payments/create-payment-intent', payload);
             setClientSecret(res.data.clientSecret);
+            setOrderId(res.data.orderId);
             setStep('payment');
         } catch (err) {
             setError(err.response?.data?.message || err.message);
@@ -85,6 +89,7 @@ function Checkout() {
                             items={items}
                             form={form}
                             totalPrice={totalPrice}
+                            orderId={orderId}
                             clearCart={clearCart}
                         />
                     </Elements>

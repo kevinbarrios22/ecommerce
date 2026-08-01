@@ -22,6 +22,16 @@ Full-stack ecommerce app built with Spring Boot and React.
 - Order confirmation after successful payment
 - User registration and login
 
+### Payments
+- Order is created as `PENDING` the moment the Stripe PaymentIntent is created, and stock is reserved immediately
+- The Stripe **webhook** (`/api/webhooks/stripe`, signature-verified) is the source of truth: `payment_intent.succeeded` transitions the order to `PAID` and moves reserved stock to sold; `payment_intent.payment_failed` cancels the order and releases the reservation
+- A scheduled **reaper job** cancels `PENDING` orders older than 15 minutes and releases their reserved stock (abandoned checkouts)
+- Full **idempotency**:
+  - A `UNIQUE` DB constraint on `orders.stripe_payment_intent_id` guarantees one intent → one order
+  - Processed Stripe event ids are recorded in `webhook_events` in the same transaction as the order update, so Stripe retries are safely deduplicated
+  - Payment intent ids are recorded in the PaymentIntent `metadata`, so the webhook knows exactly which order to update
+- A synchronous `POST /orders/{id}/confirm` endpoint acts as a backstop (verifies the intent with Stripe directly) for the case where the webhook is delayed
+
 ### Admin Panel (`/admin`)
 - Dashboard with KPIs: orders today, orders this week, total revenue, low stock count, pending orders
 - Product management: full CRUD, activate/deactivate toggle, VAT percentage, available vs reserved stock
@@ -66,9 +76,12 @@ npm run dev
 | `DB_PASSWORD`          | PostgreSQL password             |
 | `JWT_SECRET`           | Secret used to sign JWT tokens  |
 | `STRIPE_SECRET_KEY`    | Stripe secret key (sandbox)     |
+| `STRIPE_WEBHOOK_SECRET`| Stripe webhook signing secret (`whsec_...`) |
 | `ADMIN_SECRET_KEY`     | Secret for admin registration   |
 
 Copy `.env.example` to `.env` and fill in the values. The frontend defaults to `http://localhost:8080/api`.
+
+> **Note:** the app ships with `sk_test_dummy` / `whsec_dummy` placeholders. Set real Stripe keys and use the Stripe CLI (`stripe listen --forward-to localhost:8080/api/webhooks/stripe`) to receive webhooks locally. The webhook endpoint verifies the `Stripe-Signature` header and rejects invalid payloads.
 
 ## Project Structure
 
@@ -76,14 +89,14 @@ Copy `.env.example` to `.env` and fill in the values. The frontend defaults to `
 ecommerce/
 ├── backend/
 │   └── src/main/java/com/maltaland/ecommerce/
-│       ├── config/DataSeeder.java
-│       ├── controller/         # Auth, Order, Product, Category, Dashboard
+│       ├── config/DataSeeder.java, OrderCleanupJob.java
+│       ├── controller/         # Auth, Order, Product, Category, Dashboard, Webhook
 │       ├── dto/
-│       ├── entity/             # Order, Product, User, Category, OrderItem, Coupon
+│       ├── entity/             # Order, Product, User, Category, OrderItem, Coupon, WebhookEvent
 │       ├── mapper/
 │       ├── repository/
 │       ├── security/           # JwtAuthFilter, SecurityConfig, JwtUtil
-│       └── service/
+│       └── service/            # incl. PaymentService, WebhookService
 └── frontend/
     └── src/
         ├── app/                # Router, guards

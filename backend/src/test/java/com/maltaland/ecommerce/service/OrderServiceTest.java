@@ -1,6 +1,5 @@
 package com.maltaland.ecommerce.service;
 
-import com.maltaland.ecommerce.dto.OrderRequestDTO;
 import com.maltaland.ecommerce.dto.OrderResponseDTO;
 import com.maltaland.ecommerce.entity.Order;
 import com.maltaland.ecommerce.entity.OrderItem;
@@ -10,7 +9,6 @@ import com.maltaland.ecommerce.exception.ResourceNotFoundException;
 import com.maltaland.ecommerce.mapper.OrderMapper;
 import com.maltaland.ecommerce.repository.OrderRepository;
 import com.maltaland.ecommerce.repository.ProductRepository;
-import com.maltaland.ecommerce.repository.UserRepository;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,129 +39,91 @@ class OrderServiceTest {
     @Mock
     private ProductRepository productRepository;
 
-    @Mock
-    private UserRepository userRepository;
-
     private final OrderMapper orderMapper = new OrderMapper();
     private OrderService orderService;
 
-    private User existingUser;
-    private Product availableProduct;
+    private Product product;
+    private Order order;
 
     @BeforeEach
     void setUp() {
-        orderService = new OrderService(orderRepository, productRepository, userRepository, orderMapper);
+        orderService = new OrderService(orderRepository, productRepository, orderMapper);
 
-        existingUser = new User();
-        existingUser.setId(1L);
-        existingUser.setName("Existing");
-        existingUser.setEmail("existing@test.com");
+        product = new Product();
+        product.setId(1L);
+        product.setName("Test Product");
+        product.setPrice(BigDecimal.valueOf(10.00));
+        product.setStock(10);
+        product.setReservedStock(2);
 
-        availableProduct = new Product();
-        availableProduct.setId(1L);
-        availableProduct.setName("Test Product");
-        availableProduct.setPrice(BigDecimal.valueOf(10.00));
-        availableProduct.setStock(10);
-        availableProduct.setReservedStock(0);
+        User user = new User();
+        user.setId(1L);
+        user.setName("Customer");
+        user.setEmail("customer@test.com");
+
+        OrderItem item = new OrderItem();
+        item.setProduct(product);
+        item.setQuantity(2);
+        item.setUnitPrice(BigDecimal.valueOf(10.00));
+
+        order = new Order();
+        order.setId(1L);
+        order.setUser(user);
+        order.setStatus("PENDING");
+        order.setStripePaymentIntentId("pi_123");
+        order.setCreatedAt(LocalDateTime.now());
+        order.setTotal(BigDecimal.valueOf(23.60));
+        order.setItems(List.of(item));
     }
 
     @Test
-    void create_withoutStripe_guestUser_success() {
-        String email = "guest@test.com";
-        OrderRequestDTO dto = new OrderRequestDTO("Guest", email,
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 2)), null);
-
-        User guestUser = new User();
-        guestUser.setId(2L);
-        guestUser.setEmail(email);
-        guestUser.setName("Guest");
-
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-        when(userRepository.save(any(User.class))).thenReturn(guestUser);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(availableProduct));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order o = invocation.getArgument(0);
-            o.setId(1L);
-            return o;
-        });
-
-        OrderResponseDTO result = orderService.create(dto);
-
-        assertThat(result.status()).isEqualTo("PENDING");
-        assertThat(result.total()).isEqualByComparingTo(BigDecimal.valueOf(20.00));
-        assertThat(result.items()).hasSize(1);
-        assertThat(result.items().getFirst().productName()).isEqualTo("Test Product");
-        assertThat(result.items().getFirst().subtotal()).isEqualByComparingTo(BigDecimal.valueOf(20.00));
-
-        verify(userRepository).save(any(User.class));
-        verify(productRepository).findById(1L);
-        verify(orderRepository).save(any(Order.class));
-    }
-
-    @Test
-    void create_withoutStripe_existingUser_success() {
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 1)), null);
-
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
-        when(productRepository.findById(1L)).thenReturn(Optional.of(availableProduct));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order o = invocation.getArgument(0);
-            o.setId(1L);
-            return o;
-        });
-
-        OrderResponseDTO result = orderService.create(dto);
-
-        assertThat(result.status()).isEqualTo("PENDING");
-        assertThat(result.total()).isEqualByComparingTo(BigDecimal.valueOf(10.00));
-
-        verify(userRepository, never()).save(any(User.class));
-    }
-
-    @Test
-    void create_withStripe_success() {
-        String piId = "pi_succeeded";
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 1)), piId);
-
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
-        when(productRepository.findById(1L)).thenReturn(Optional.of(availableProduct));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order o = invocation.getArgument(0);
-            o.setId(1L);
-            return o;
-        });
+    void confirmPayment_success_movesReservedToSold() {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
             PaymentIntent intent = mock(PaymentIntent.class);
             when(intent.getStatus()).thenReturn("succeeded");
-            mocked.when(() -> PaymentIntent.retrieve(piId)).thenReturn(intent);
+            mocked.when(() -> PaymentIntent.retrieve("pi_123")).thenReturn(intent);
 
-            OrderResponseDTO result = orderService.create(dto);
+            when(orderRepository.save(any(Order.class))).thenReturn(order);
+
+            OrderResponseDTO result = orderService.confirmPayment(1L);
 
             assertThat(result.status()).isEqualTo("PAID");
-            assertThat(result.total()).isEqualByComparingTo(BigDecimal.valueOf(10.00));
+            assertThat(order.getPaidAt()).isNotNull();
+            // 10 stock - 2 qty = 8; 2 reserved - 2 qty = 0
+            assertThat(product.getStock()).isEqualTo(8);
+            assertThat(product.getReservedStock()).isZero();
 
-            mocked.verify(() -> PaymentIntent.retrieve(piId));
+            mocked.verify(() -> PaymentIntent.retrieve("pi_123"));
         }
     }
 
     @Test
-    void create_withStripe_paymentNotCompleted_throws() {
-        String piId = "pi_incomplete";
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 1)), piId);
+    void confirmPayment_alreadyPaid_isIdempotent() {
+        order.setStatus("PAID");
+        order.setPaidAt(LocalDateTime.now());
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
+        OrderResponseDTO result = orderService.confirmPayment(1L);
+
+        assertThat(result.status()).isEqualTo("PAID");
+        // No Stripe call, no inventory change, no save
+        verify(orderRepository, never()).save(any());
+        assertThat(product.getStock()).isEqualTo(10);
+    }
+
+    @Test
+    void confirmPayment_intentNotSucceeded_throws() {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
             PaymentIntent intent = mock(PaymentIntent.class);
             when(intent.getStatus()).thenReturn("requires_payment_method");
-            mocked.when(() -> PaymentIntent.retrieve(piId)).thenReturn(intent);
+            mocked.when(() -> PaymentIntent.retrieve("pi_123")).thenReturn(intent);
 
             IllegalStateException ex = assertThrows(IllegalStateException.class,
-                    () -> orderService.create(dto));
+                    () -> orderService.confirmPayment(1L));
             assertThat(ex.getMessage()).contains("Payment has not been completed");
 
             verify(orderRepository, never()).save(any());
@@ -171,18 +131,14 @@ class OrderServiceTest {
     }
 
     @Test
-    void create_withStripe_stripeException_throws() {
-        String piId = "pi_error";
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 1)), piId);
-
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
+    void confirmPayment_stripeException_throws() {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
-            mocked.when(() -> PaymentIntent.retrieve(piId)).thenThrow(mock(StripeException.class));
+            mocked.when(() -> PaymentIntent.retrieve("pi_123")).thenThrow(mock(StripeException.class));
 
             RuntimeException ex = assertThrows(RuntimeException.class,
-                    () -> orderService.create(dto));
+                    () -> orderService.confirmPayment(1L));
             assertThat(ex.getMessage()).contains("Failed to verify payment");
 
             verify(orderRepository, never()).save(any());
@@ -190,82 +146,124 @@ class OrderServiceTest {
     }
 
     @Test
-    void create_insufficientStock_throws() {
-        availableProduct.setStock(5);
-        availableProduct.setReservedStock(4);
-
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 2)), null);
-
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
-        when(productRepository.findById(1L)).thenReturn(Optional.of(availableProduct));
+    void confirmPayment_noIntent_throws() {
+        order.setStripePaymentIntentId(null);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> orderService.create(dto));
-        assertThat(ex.getMessage()).contains("Insufficient stock");
+                () -> orderService.confirmPayment(1L));
+        assertThat(ex.getMessage()).contains("no payment intent");
+    }
+
+    @Test
+    void markPaidFromWebhook_movesInventory() {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenReturn(order);
+
+        orderService.markPaidFromWebhook(1L);
+
+        assertThat(order.getStatus()).isEqualTo("PAID");
+        assertThat(product.getStock()).isEqualTo(8);
+        assertThat(product.getReservedStock()).isZero();
+    }
+
+    @Test
+    void markPaidFromWebhook_alreadyPaid_isNoop() {
+        order.setStatus("PAID");
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        orderService.markPaidFromWebhook(1L);
 
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void create_productNotFound_throws() {
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(99L, 1)), null);
+    void updateStatus_pendingToCancelled_releasesReserved() {
+        order.setStatus("PENDING");
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
-        when(productRepository.findById(99L)).thenReturn(Optional.empty());
+        OrderResponseDTO result = orderService.updateStatus(1L, "CANCELLED");
 
-        assertThrows(ResourceNotFoundException.class, () -> orderService.create(dto));
+        assertThat(result.status()).isEqualTo("CANCELLED");
+        // 2 reserved - 2 qty = 0; stock untouched (10)
+        assertThat(product.getReservedStock()).isZero();
+        assertThat(product.getStock()).isEqualTo(10);
+    }
+
+    @Test
+    void updateStatus_paidToCancelled_restocks() {
+        order.setStatus("PAID");
+        // simulating a paid order: stock was decremented already
+        product.setStock(8);
+        product.setReservedStock(0);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenReturn(order);
+
+        OrderResponseDTO result = orderService.updateStatus(1L, "CANCELLED");
+
+        assertThat(result.status()).isEqualTo("CANCELLED");
+        // 8 stock + 2 qty = 10
+        assertThat(product.getStock()).isEqualTo(10);
+        assertThat(product.getReservedStock()).isZero();
+    }
+
+    @Test
+    void updateStatus_invalidTransition_throws() {
+        order.setStatus("PENDING");
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.updateStatus(1L, "DELIVERED"));
+        assertThat(ex.getMessage()).contains("Cannot transition");
 
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void create_reservesStockCorrectly() {
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(new OrderRequestDTO.OrderItemRequest(1L, 3)), null);
+    void cancelExpiredPendingOrders_cancelsAndReleasesStock() {
+        when(orderRepository.findByStatusAndCreatedAtBefore(eq("PENDING"), any(LocalDateTime.class)))
+                .thenReturn(List.of(order));
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
-        when(productRepository.findById(1L)).thenReturn(Optional.of(availableProduct));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order o = invocation.getArgument(0);
-            o.setId(1L);
-            return o;
-        });
+        int cancelled = orderService.cancelExpiredPendingOrders(15);
 
-        orderService.create(dto);
-
-        assertThat(availableProduct.getReservedStock()).isEqualTo(3);
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(order.getStatus()).isEqualTo("CANCELLED");
+        assertThat(product.getReservedStock()).isZero();
     }
 
     @Test
-    void create_calculatesTotalCorrectly() {
-        Product product2 = new Product();
-        product2.setId(2L);
-        product2.setName("Second Product");
-        product2.setPrice(BigDecimal.valueOf(15.50));
-        product2.setStock(20);
-        product2.setReservedStock(0);
+    void cancelExpiredPendingOrders_skipsOrdersAlreadyChanged() {
+        when(orderRepository.findByStatusAndCreatedAtBefore(eq("PENDING"), any(LocalDateTime.class)))
+                .thenReturn(List.of(order));
+        // order was already PAID by the webhook between the query and the reaper tx
+        Order alreadyPaid = new Order();
+        alreadyPaid.setId(1L);
+        alreadyPaid.setStatus("PAID");
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(alreadyPaid));
 
-        OrderRequestDTO dto = new OrderRequestDTO("Existing", "existing@test.com",
-                List.of(
-                        new OrderRequestDTO.OrderItemRequest(1L, 2),
-                        new OrderRequestDTO.OrderItemRequest(2L, 3)
-                ), null);
+        int cancelled = orderService.cancelExpiredPendingOrders(15);
 
-        when(userRepository.findByEmail("existing@test.com")).thenReturn(Optional.of(existingUser));
-        when(productRepository.findById(1L)).thenReturn(Optional.of(availableProduct));
-        when(productRepository.findById(2L)).thenReturn(Optional.of(product2));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order o = invocation.getArgument(0);
-            o.setId(1L);
-            return o;
-        });
+        assertThat(cancelled).isZero();
+        verify(orderRepository, never()).save(any());
+    }
 
-        OrderResponseDTO result = orderService.create(dto);
+    @Test
+    void findById_notFound_throws() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
 
-        // 10.00 * 2 + 15.50 * 3 = 20.00 + 46.50 = 66.50
-        assertThat(result.total()).isEqualByComparingTo(BigDecimal.valueOf(66.50));
-        assertThat(result.items()).hasSize(2);
+        assertThrows(ResourceNotFoundException.class, () -> orderService.findById(99L));
+    }
+
+    @Test
+    void findById_success() {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        OrderResponseDTO result = orderService.findById(1L);
+
+        assertThat(result.id()).isEqualTo(1L);
+        assertThat(result.items()).hasSize(1);
     }
 }

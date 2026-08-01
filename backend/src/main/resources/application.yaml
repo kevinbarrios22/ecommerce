@@ -17,6 +17,7 @@ jwt:
 
 stripe:
   secret-key: ${STRIPE_SECRET_KEY:sk_test_dummy}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_dummy}
 
 app:
   admin-secret: ${ADMIN_SECRET_KEY:admin-secret-2024}

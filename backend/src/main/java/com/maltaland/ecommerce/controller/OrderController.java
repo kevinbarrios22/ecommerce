@@ -1,11 +1,8 @@
 package com.maltaland.ecommerce.controller;
 
-import com.maltaland.ecommerce.dto.OrderRequestDTO;
 import com.maltaland.ecommerce.dto.OrderResponseDTO;
 import com.maltaland.ecommerce.service.OrderService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,9 +49,8 @@ public class OrderController {
         return ResponseEntity.ok(orderService.updateStatus(id, newStatus));
     }
 
-    @PostMapping
-    public ResponseEntity<OrderResponseDTO> create(@Valid @RequestBody OrderRequestDTO dto) {
-        OrderResponseDTO created = orderService.create(dto);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    @PostMapping("/{id}/confirm")
+    public ResponseEntity<OrderResponseDTO> confirm(@PathVariable Long id) {
+        return ResponseEntity.ok(orderService.confirmPayment(id));
     }
 }

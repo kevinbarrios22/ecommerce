@@ -50,10 +50,7 @@ public class PaymentService {
         PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
                 .setAmount(amountCents)
                 .setCurrency("eur")
-                .setAutomaticPaymentMethods(
-                        PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
-                                .setEnabled(true)
-                                .build())
+                .addAllPaymentMethodType(List.of("card", "revolut_pay", "paypal"))
                 .putMetadata("customerEmail", dto.customerEmail())
                 .putMetadata("customerName", dto.customerName())
                 .build();

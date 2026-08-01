@@ -34,11 +34,23 @@ function PaymentForm({ items, form, totalPrice, orderId, clearCart }) {
         const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
             elements,
             redirect: 'if_required',
+            confirmParams: {
+                return_url: `${window.location.origin}/order-confirmation?orderId=${orderId}`,
+            },
         });
 
         if (confirmError) {
             setError(confirmError.message);
             setProcessing(false);
+            return;
+        }
+
+        // Redirect-based methods (PayPal, Revolut Pay): follow the redirect.
+        // Stripe.js does not navigate automatically with redirect: 'if_required',
+        // so we send the customer to the external payment page. On return the
+        // order-confirmation page confirms the order by orderId.
+        if (paymentIntent?.status === 'requires_action' && paymentIntent?.next_action?.type === 'redirect_to_url') {
+            window.location.href = paymentIntent.next_action.redirect_to_url.url;
             return;
         }
 

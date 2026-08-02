@@ -5,7 +5,7 @@ import api from '../../../shared/api/api';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function PaymentForm({ items, form, totalPrice, orderId, clearCart }) {
+function PaymentForm({ totalPrice, orderId, clearCart }) {
     const stripe = useStripe();
     const elements = useElements();
     const navigate = useNavigate();
@@ -86,11 +86,11 @@ function PaymentForm({ items, form, totalPrice, orderId, clearCart }) {
     };
 
     return (
-        <form className="checkout__form" onSubmit={handleSubmit}>
-            <h2>Card details</h2>
+        <form className="sf-checkout__form" onSubmit={handleSubmit}>
+            <h2 className="sf-checkout__panel-title">Payment</h2>
             <PaymentElement />
-            {error && <p className="error">{error}</p>}
-            <button className="btn" type="submit" disabled={!stripe || !elements || processing}>
+            {error && <p className="sf-checkout__error">{error}</p>}
+            <button className="sf-btn sf-btn--primary" type="submit" disabled={!stripe || !elements || processing}>
                 {processing ? 'Processing...' : `Pay €${totalPrice.toFixed(2)}`}
             </button>
         </form>

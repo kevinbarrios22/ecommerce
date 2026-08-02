@@ -11,7 +11,16 @@ public record OrderResponseDTO(
         String customerName,
         String customerEmail,
         String stripePaymentIntentId,
+        String paymentMethod,
         LocalDateTime paidAt,
+        LocalDateTime shippedAt,
+        LocalDateTime deliveredAt,
+        String shippingName,
+        String shippingAddress,
+        String shippingCity,
+        String shippingZip,
+        String shippingCountry,
+        String shippingPhone,
         LocalDateTime createdAt,
         List<OrderItemResponse> items
 ) {

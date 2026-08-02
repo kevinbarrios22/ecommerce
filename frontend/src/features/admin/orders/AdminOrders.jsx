@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../../../shared/api/api';
 
 const STATUSES = ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
@@ -8,27 +8,30 @@ function AdminOrders() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selected, setSelected] = useState(null);
-    const [filters, setFilters] = useState({ status: '', email: '', start: '', end: '' });
+    const [view, setView] = useState('all');
+    const [filters, setFilters] = useState({ status: '', email: '', paymentMethod: '', start: '', end: '' });
 
-    const buildQuery = () => {
+    const buildQuery = useCallback(() => {
         const params = new URLSearchParams();
         if (filters.status) params.set('status', filters.status);
         if (filters.email) params.set('email', filters.email);
+        if (filters.paymentMethod) params.set('paymentMethod', filters.paymentMethod);
         if (filters.start) params.set('start', filters.start);
         if (filters.end) params.set('end', filters.end);
         const qs = params.toString();
         return qs ? `/orders?${qs}` : '/orders';
-    };
+    }, [filters]);
 
-    const fetchOrders = () => {
-        setLoading(true);
-        setSelected(null);
-        api.get(buildQuery())
+    const fetchOrders = useCallback(() => {
+        const url = view === 'transfers' ? '/orders/transfers/pending' : buildQuery();
+        api.get(url)
             .then((res) => { setOrders(res.data); setLoading(false); })
             .catch((err) => { setError(err.message); setLoading(false); });
-    };
+    }, [view, buildQuery]);
 
-    useEffect(fetchOrders, [filters.status]);
+    useEffect(() => {
+        fetchOrders();
+    }, [fetchOrders]);
 
     const handleStatusChange = (id, newStatus) => {
         api.put(`/orders/${id}/status`, { status: newStatus })
@@ -45,6 +48,18 @@ function AdminOrders() {
         const colors = { PENDING: '#f59e0b', PAID: '#3b82f6', SHIPPED: '#8b5cf6', DELIVERED: '#10b981', CANCELLED: '#ef4444' };
         return <span style={{ background: colors[s] || '#6b7280', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>{s}</span>;
     };
+
+    const paymentMethodLabel = (pm) => {
+        const labels = { CARD: 'Card / PayPal / Revolut', WISE_TRANSFER: 'Bank transfer (Wise)', REVOLUT_TRANSFER: 'Bank transfer (Revolut)' };
+        return labels[pm] || pm || '-';
+    };
+
+    const isTransfer = (pm) => pm === 'WISE_TRANSFER' || pm === 'REVOLUT_TRANSFER';
+
+    const reservedUntil = (o) =>
+        isTransfer(o.paymentMethod) && o.createdAt
+            ? new Date(new Date(o.createdAt).getTime() + 48 * 3600 * 1000).toLocaleString()
+            : null;
 
     if (loading && orders.length === 0) {
         return <div className="loading"><div className="loading__spinner" /><p>Loading orders...</p></div>;
@@ -65,9 +80,29 @@ function AdminOrders() {
                     <p><strong>Customer:</strong> {o.customerName} ({o.customerEmail})</p>
                     <p><strong>Total:</strong> &euro;{o.total}</p>
                     <p><strong>Created:</strong> {o.createdAt ? new Date(o.createdAt).toLocaleString() : '-'}</p>
+                    <p><strong>Payment:</strong> {paymentMethodLabel(o.paymentMethod)}</p>
+                    {isTransfer(o.paymentMethod) && (
+                        <>
+                            <p><strong>Transfer reference:</strong> <code>MALTALAND-{o.id}</code></p>
+                            <p><strong>Reserved until:</strong> {reservedUntil(o)}</p>
+                        </>
+                    )}
                     <p><strong>Payment Intent:</strong> {o.stripePaymentIntentId || '-'}</p>
                     <p><strong>Paid At:</strong> {o.paidAt ? new Date(o.paidAt).toLocaleString() : '-'}</p>
+                    <p><strong>Shipped At:</strong> {o.shippedAt ? new Date(o.shippedAt).toLocaleString() : '-'}</p>
+                    <p><strong>Delivered At:</strong> {o.deliveredAt ? new Date(o.deliveredAt).toLocaleString() : '-'}</p>
                 </div>
+
+                {o.shippingAddress && (
+                    <div className="admin-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                        <p><strong>Ship to:</strong></p>
+                        <p>{o.shippingName}</p>
+                        <p>{o.shippingAddress}</p>
+                        <p>{o.shippingCity} {o.shippingZip}</p>
+                        <p>{o.shippingCountry}</p>
+                        {o.shippingPhone && <p>Phone: {o.shippingPhone}</p>}
+                    </div>
+                )}
 
                 {nextStatus(o.status) && (
                     <button className="btn" onClick={() => handleStatusChange(o.id, nextStatus(o.status))} style={{ marginBottom: '1rem' }}>
@@ -104,10 +139,25 @@ function AdminOrders() {
         <div>
             <h1 className="page-title">Orders</h1>
 
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                <button className={view === 'all' ? 'btn' : 'btn btn--secondary'} onClick={() => setView('all')}>
+                    All orders
+                </button>
+                <button className={view === 'transfers' ? 'btn' : 'btn btn--secondary'} onClick={() => setView('transfers')}>
+                    Transfers pending
+                </button>
+            </div>
+
             <div className="admin-filters" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                 <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="search-input" style={{ width: 'auto' }}>
                     <option value="">All statuses</option>
                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={filters.paymentMethod} onChange={(e) => setFilters({ ...filters, paymentMethod: e.target.value })} className="search-input" style={{ width: 'auto' }}>
+                    <option value="">All payment methods</option>
+                    <option value="CARD">Card / PayPal / Revolut</option>
+                    <option value="WISE_TRANSFER">Bank transfer (Wise)</option>
+                    <option value="REVOLUT_TRANSFER">Bank transfer (Revolut)</option>
                 </select>
                 <input className="search-input" placeholder="Search by email..." value={filters.email}
                        onChange={(e) => setFilters({ ...filters, email: e.target.value })} style={{ width: '200px' }} />
@@ -116,7 +166,7 @@ function AdminOrders() {
                 <input className="search-input" type="date" value={filters.end}
                        onChange={(e) => setFilters({ ...filters, end: e.target.value })} style={{ width: 'auto' }} />
                 <button className="btn" onClick={fetchOrders}>Search</button>
-                <button className="btn btn--secondary" onClick={() => setFilters({ status: '', email: '', start: '', end: '' })}>Clear</button>
+                <button className="btn btn--secondary" onClick={() => setFilters({ status: '', email: '', paymentMethod: '', start: '', end: '' })}>Clear</button>
             </div>
 
             {orders.length === 0 ? (
@@ -130,6 +180,7 @@ function AdminOrders() {
                             <th>Email</th>
                             <th>Total</th>
                             <th>Status</th>
+                            <th>Payment</th>
                             <th>Date</th>
                             <th>Items</th>
                             <th></th>
@@ -143,6 +194,16 @@ function AdminOrders() {
                                 <td>{o.customerEmail}</td>
                                 <td>&euro;{o.total}</td>
                                 <td>{statusBadge(o.status)}</td>
+                                <td>
+                                    {paymentMethodLabel(o.paymentMethod)}
+                                    {isTransfer(o.paymentMethod) && (
+                                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                            <code>MALTALAND-{o.id}</code>
+                                            <br />
+                                            until {reservedUntil(o)}
+                                        </div>
+                                    )}
+                                </td>
                                 <td>{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '-'}</td>
                                 <td>{o.items?.length || 0}</td>
                                 <td>

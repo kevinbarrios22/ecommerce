@@ -23,7 +23,16 @@ public class OrderMapper {
                 order.getUser().getName(),
                 order.getUser().getEmail(),
                 order.getStripePaymentIntentId(),
+                order.getPaymentMethod(),
                 order.getPaidAt(),
+                order.getShippedAt(),
+                order.getDeliveredAt(),
+                order.getShippingName(),
+                order.getShippingAddress(),
+                order.getShippingCity(),
+                order.getShippingZip(),
+                order.getShippingCountry(),
+                order.getShippingPhone(),
                 order.getCreatedAt(),
                 itemResponses
         );

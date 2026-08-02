@@ -18,4 +18,13 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    files: ['**/*.{js,jsx}'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        { allowExportNames: ['useAuth', 'useCart'] },
+      ],
+    },
+  },
 ])

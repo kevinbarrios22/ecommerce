@@ -19,6 +19,7 @@ export default function AdminLayout({ children }) {
                     <Link to="/admin/products">Products</Link>
                     <Link to="/admin/categories">Categories</Link>
                     <Link to="/admin/orders">Orders</Link>
+                    <Link to="/admin/users">Staff</Link>
                 </nav>
                 <div className="admin-sidebar__bottom">
                     <Link to="/" className="admin-sidebar__store-link">View Store</Link>

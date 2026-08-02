@@ -9,7 +9,6 @@ function Categories() {
     const [form, setForm] = useState({ name: '', slug: '' });
 
     const fetchCategories = () => {
-        setLoading(true);
         api.get('/categories')
             .then((res) => {
                 setCategories(res.data);

@@ -1,7 +1,11 @@
 package com.maltaland.ecommerce.service;
 
+import com.maltaland.ecommerce.config.BankTransferProperties;
+import com.maltaland.ecommerce.dto.BankTransferRequestDTO;
+import com.maltaland.ecommerce.dto.BankTransferResponseDTO;
 import com.maltaland.ecommerce.dto.PaymentRequestDTO;
 import com.maltaland.ecommerce.dto.PaymentResponseDTO;
+import com.maltaland.ecommerce.dto.ShippingAddressDTO;
 import com.maltaland.ecommerce.entity.Order;
 import com.maltaland.ecommerce.entity.OrderItem;
 import com.maltaland.ecommerce.entity.Product;
@@ -28,9 +32,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PaymentService {
 
+    /** How long a manual bank-transfer order stays reserved before auto-cancel. */
+    public static final long BANK_TRANSFER_EXPIRY_HOURS = 48;
+
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+    private final BankTransferProperties bankTransferProperties;
+    private final EmailService emailService;
 
     /**
      * Creates the Stripe PaymentIntent and, in the same transaction, creates the
@@ -40,9 +49,9 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponseDTO createPaymentIntent(PaymentRequestDTO dto) {
-        validateStock(dto);
+        validateStock(dto.items());
 
-        BigDecimal total = computeTotal(dto);
+        BigDecimal total = computeTotal(dto.items());
         long amountCents = total.multiply(BigDecimal.valueOf(100))
                 .setScale(0, RoundingMode.HALF_UP)
                 .longValue();
@@ -57,7 +66,8 @@ public class PaymentService {
 
         try {
             PaymentIntent intent = PaymentIntent.create(params);
-            Order order = createPendingOrder(dto, intent.getId(), total);
+            Order order = createPendingOrder(dto.customerName(), dto.customerEmail(),
+                    dto.items(), intent.getId(), total, "CARD", dto.shippingAddress());
             return new PaymentResponseDTO(
                     intent.getClientSecret(),
                     intent.getId(),
@@ -69,8 +79,46 @@ public class PaymentService {
         }
     }
 
-    private void validateStock(PaymentRequestDTO dto) {
-        for (PaymentRequestDTO.PaymentItem itemDto : dto.items()) {
+    /**
+     * Creates a PENDING order without any Stripe intent for a manual bank
+     * transfer via Wise or Revolut. Stock is reserved the same way; the order is
+     * confirmed manually by staff once the transfer arrives. No money moves
+     * automatically, so no provider API is involved.
+     */
+    @Transactional
+    public BankTransferResponseDTO createBankTransferOrder(BankTransferRequestDTO dto) {
+        validateStock(dto.items());
+
+        BigDecimal total = computeTotal(dto.items()).setScale(2, RoundingMode.HALF_UP);
+        String paymentMethod = switch (dto.provider()) {
+            case WISE -> "WISE_TRANSFER";
+            case REVOLUT -> "REVOLUT_TRANSFER";
+        };
+
+        Order order = createPendingOrder(dto.customerName(), dto.customerEmail(),
+                dto.items(), null, total, paymentMethod, dto.shippingAddress());
+
+        BankTransferProperties.Account account = switch (dto.provider()) {
+            case WISE -> bankTransferProperties.wise();
+            case REVOLUT -> bankTransferProperties.revolut();
+        };
+
+        BankTransferResponseDTO response = new BankTransferResponseDTO(
+                order.getId(),
+                total,
+                "MALTALAND-" + order.getId(),
+                dto.provider().name(),
+                account.accountHolder(),
+                account.iban(),
+                account.bic(),
+                order.getCreatedAt().plusHours(BANK_TRANSFER_EXPIRY_HOURS));
+
+        emailService.sendTransferInstructionsAfterCommit(order.getId(), response);
+        return response;
+    }
+
+    private void validateStock(List<PaymentRequestDTO.PaymentItem> items) {
+        for (PaymentRequestDTO.PaymentItem itemDto : items) {
             Product product = findProductOrThrow(itemDto.productId());
             if (product.getStock() - product.getReservedStock() < itemDto.quantity()) {
                 throw new IllegalStateException("Insufficient stock for product: " + product.getName());
@@ -78,24 +126,32 @@ public class PaymentService {
         }
     }
 
-    private BigDecimal computeTotal(PaymentRequestDTO dto) {
+    private BigDecimal computeTotal(List<PaymentRequestDTO.PaymentItem> items) {
         BigDecimal total = BigDecimal.ZERO;
-        for (PaymentRequestDTO.PaymentItem itemDto : dto.items()) {
+        for (PaymentRequestDTO.PaymentItem itemDto : items) {
             Product product = findProductOrThrow(itemDto.productId());
-            BigDecimal vatMultiplier = BigDecimal.ONE.add(
-                    BigDecimal.valueOf(product.getVatPercentage()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
-            BigDecimal priceWithVat = product.getPrice().multiply(vatMultiplier);
-            total = total.add(priceWithVat.multiply(BigDecimal.valueOf(itemDto.quantity())));
+            total = total.add(priceWithVat(product).multiply(BigDecimal.valueOf(itemDto.quantity())));
         }
         return total;
     }
 
-    private Order createPendingOrder(PaymentRequestDTO dto, String paymentIntentId, BigDecimal total) {
-        User user = userRepository.findByEmail(dto.customerEmail())
+    /** Price with VAT applied, rounded to cents. Must match the total exactly. */
+    private BigDecimal priceWithVat(Product product) {
+        BigDecimal vatMultiplier = BigDecimal.ONE.add(
+                BigDecimal.valueOf(product.getVatPercentage()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
+        return product.getPrice().multiply(vatMultiplier).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private Order createPendingOrder(String customerName, String customerEmail,
+                                     List<PaymentRequestDTO.PaymentItem> items,
+                                     String paymentIntentId, BigDecimal total,
+                                     String paymentMethod,
+                                     ShippingAddressDTO shippingAddress) {
+        User user = userRepository.findByEmail(customerEmail)
                 .orElseGet(() -> {
                     User newUser = new User();
-                    newUser.setName(dto.customerName());
-                    newUser.setEmail(dto.customerEmail());
+                    newUser.setName(customerName);
+                    newUser.setEmail(customerEmail);
                     newUser.setPassword(UUID.randomUUID().toString());
                     newUser.setRegisteredAt(LocalDateTime.now());
                     return userRepository.save(newUser);
@@ -105,11 +161,21 @@ public class PaymentService {
         order.setUser(user);
         order.setStatus("PENDING");
         order.setStripePaymentIntentId(paymentIntentId);
+        order.setPaymentMethod(paymentMethod);
         order.setCreatedAt(LocalDateTime.now());
         order.setTotal(total);
 
-        List<OrderItem> items = new ArrayList<>();
-        for (PaymentRequestDTO.PaymentItem itemDto : dto.items()) {
+        if (shippingAddress != null) {
+            order.setShippingName(shippingAddress.name());
+            order.setShippingAddress(shippingAddress.address());
+            order.setShippingCity(shippingAddress.city());
+            order.setShippingZip(shippingAddress.zip());
+            order.setShippingCountry(shippingAddress.country());
+            order.setShippingPhone(shippingAddress.phone());
+        }
+
+        List<OrderItem> itemsEntities = new ArrayList<>();
+        for (PaymentRequestDTO.PaymentItem itemDto : items) {
             Product product = findProductOrThrow(itemDto.productId());
             if (product.getStock() - product.getReservedStock() < itemDto.quantity()) {
                 throw new IllegalStateException("Insufficient stock for product: " + product.getName());
@@ -120,11 +186,11 @@ public class PaymentService {
             item.setOrder(order);
             item.setProduct(product);
             item.setQuantity(itemDto.quantity());
-            item.setUnitPrice(product.getPrice());
-            items.add(item);
+            item.setUnitPrice(priceWithVat(product));
+            itemsEntities.add(item);
         }
 
-        order.setItems(items);
+        order.setItems(itemsEntities);
         return orderRepository.save(order);
     }
 

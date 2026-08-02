@@ -33,6 +33,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/orders/*/confirm").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/orders/track").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/orders/my").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/payments/**").permitAll()
                 .requestMatchers("/api/webhooks/**").permitAll()
                 .requestMatchers("/api/orders/**").hasRole("ADMIN")

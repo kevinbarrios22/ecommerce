@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +40,12 @@ class OrderServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     private final OrderMapper orderMapper = new OrderMapper();
     private OrderService orderService;
 
@@ -47,7 +54,7 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        orderService = new OrderService(orderRepository, productRepository, orderMapper);
+        orderService = new OrderService(orderRepository, productRepository, orderMapper, emailService, entityManager);
 
         product = new Product();
         product.setId(1L);
@@ -74,12 +81,13 @@ class OrderServiceTest {
         order.setCreatedAt(LocalDateTime.now());
         order.setTotal(BigDecimal.valueOf(23.60));
         order.setItems(List.of(item));
+
+        lenient().when(entityManager.find(eq(Order.class), eq(1L), eq(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)))
+                .thenReturn(order);
     }
 
     @Test
     void confirmPayment_success_movesReservedToSold() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
             PaymentIntent intent = mock(PaymentIntent.class);
             when(intent.getStatus()).thenReturn("succeeded");
@@ -103,7 +111,6 @@ class OrderServiceTest {
     void confirmPayment_alreadyPaid_isIdempotent() {
         order.setStatus("PAID");
         order.setPaidAt(LocalDateTime.now());
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         OrderResponseDTO result = orderService.confirmPayment(1L);
 
@@ -115,8 +122,6 @@ class OrderServiceTest {
 
     @Test
     void confirmPayment_intentNotSucceeded_throws() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
             PaymentIntent intent = mock(PaymentIntent.class);
             when(intent.getStatus()).thenReturn("requires_payment_method");
@@ -132,8 +137,6 @@ class OrderServiceTest {
 
     @Test
     void confirmPayment_stripeException_throws() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
             mocked.when(() -> PaymentIntent.retrieve("pi_123")).thenThrow(mock(StripeException.class));
 
@@ -148,7 +151,6 @@ class OrderServiceTest {
     @Test
     void confirmPayment_noIntent_throws() {
         order.setStripePaymentIntentId(null);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> orderService.confirmPayment(1L));
@@ -157,7 +159,6 @@ class OrderServiceTest {
 
     @Test
     void markPaidFromWebhook_movesInventory() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenReturn(order);
 
         orderService.markPaidFromWebhook(1L);
@@ -170,7 +171,6 @@ class OrderServiceTest {
     @Test
     void markPaidFromWebhook_alreadyPaid_isNoop() {
         order.setStatus("PAID");
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         orderService.markPaidFromWebhook(1L);
 
@@ -180,7 +180,6 @@ class OrderServiceTest {
     @Test
     void updateStatus_pendingToCancelled_releasesReserved() {
         order.setStatus("PENDING");
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenReturn(order);
 
         OrderResponseDTO result = orderService.updateStatus(1L, "CANCELLED");
@@ -197,7 +196,6 @@ class OrderServiceTest {
         // simulating a paid order: stock was decremented already
         product.setStock(8);
         product.setReservedStock(0);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenReturn(order);
 
         OrderResponseDTO result = orderService.updateStatus(1L, "CANCELLED");
@@ -211,7 +209,6 @@ class OrderServiceTest {
     @Test
     void updateStatus_invalidTransition_throws() {
         order.setStatus("PENDING");
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> orderService.updateStatus(1L, "DELIVERED"));
@@ -222,12 +219,12 @@ class OrderServiceTest {
 
     @Test
     void cancelExpiredPendingOrders_cancelsAndReleasesStock() {
+        order.setCreatedAt(LocalDateTime.now().minusMinutes(30));
         when(orderRepository.findByStatusAndCreatedAtBefore(eq("PENDING"), any(LocalDateTime.class)))
                 .thenReturn(List.of(order));
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-        int cancelled = orderService.cancelExpiredPendingOrders(15);
+        int cancelled = orderService.cancelExpiredPendingOrders(15, 48 * 60);
 
         assertThat(cancelled).isEqualTo(1);
         assertThat(order.getStatus()).isEqualTo("CANCELLED");
@@ -236,18 +233,59 @@ class OrderServiceTest {
 
     @Test
     void cancelExpiredPendingOrders_skipsOrdersAlreadyChanged() {
+        order.setCreatedAt(LocalDateTime.now().minusMinutes(30));
         when(orderRepository.findByStatusAndCreatedAtBefore(eq("PENDING"), any(LocalDateTime.class)))
                 .thenReturn(List.of(order));
         // order was already PAID by the webhook between the query and the reaper tx
         Order alreadyPaid = new Order();
         alreadyPaid.setId(1L);
         alreadyPaid.setStatus("PAID");
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(alreadyPaid));
+        when(entityManager.find(eq(Order.class), eq(1L), eq(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)))
+                .thenReturn(alreadyPaid);
 
-        int cancelled = orderService.cancelExpiredPendingOrders(15);
+        int cancelled = orderService.cancelExpiredPendingOrders(15, 48 * 60);
 
         assertThat(cancelled).isZero();
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void cancelExpiredPendingOrders_keepsRecentBankTransfer() {
+        Order transferOrder = new Order();
+        transferOrder.setId(2L);
+        transferOrder.setStatus("PENDING");
+        transferOrder.setPaymentMethod("WISE_TRANSFER");
+        transferOrder.setCreatedAt(LocalDateTime.now().minusMinutes(20));
+
+        when(orderRepository.findByStatusAndCreatedAtBefore(eq("PENDING"), any(LocalDateTime.class)))
+                .thenReturn(List.of(transferOrder));
+
+        int cancelled = orderService.cancelExpiredPendingOrders(15, 48 * 60);
+
+        assertThat(cancelled).isZero();
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void cancelExpiredPendingOrders_cancelsExpiredBankTransfer() {
+        Order transferOrder = new Order();
+        transferOrder.setId(3L);
+        transferOrder.setStatus("PENDING");
+        transferOrder.setPaymentMethod("REVOLUT_TRANSFER");
+        transferOrder.setCreatedAt(LocalDateTime.now().minusHours(50));
+        transferOrder.setUser(order.getUser());
+        transferOrder.setItems(List.of());
+
+        when(orderRepository.findByStatusAndCreatedAtBefore(eq("PENDING"), any(LocalDateTime.class)))
+                .thenReturn(List.of(transferOrder));
+        when(entityManager.find(eq(Order.class), eq(3L), eq(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)))
+                .thenReturn(transferOrder);
+        when(orderRepository.save(any(Order.class))).thenReturn(transferOrder);
+
+        int cancelled = orderService.cancelExpiredPendingOrders(15, 48 * 60);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(transferOrder.getStatus()).isEqualTo("CANCELLED");
     }
 
     @Test

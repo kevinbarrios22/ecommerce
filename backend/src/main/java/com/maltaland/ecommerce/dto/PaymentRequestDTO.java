@@ -17,7 +17,9 @@ public record PaymentRequestDTO(
         String customerEmail,
 
         @NotEmpty(message = "Order must have at least one item")
-        List<PaymentItem> items
+        List<PaymentItem> items,
+
+        ShippingAddressDTO shippingAddress
 ) {
     public record PaymentItem(
             @NotNull(message = "Product id is required")

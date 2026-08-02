@@ -1,0 +1,22 @@
+:root {
+  --color-bg-primary: #faf7f2;
+  --color-bg-primary-soft: #f3ede2;
+  --color-bg-dark: #1a1410;
+  --color-accent: #c8860a;
+  --color-accent-soft: rgba(200, 134, 10, 0.12);
+  --color-accent-secondary: #2d5016;
+  --color-text: #2c2416;
+  --color-text-muted: #6b5e4f;
+  --color-highlight: #b84a2f;
+  --color-border: #e8e0d4;
+
+  --sf-radius-sm: 8px;
+  --sf-radius-md: 12px;
+  --sf-radius-lg: 20px;
+
+  --sf-shadow-sm: 0 2px 10px rgba(44, 36, 22, 0.08);
+  --sf-shadow-md: 0 14px 34px rgba(44, 36, 22, 0.12);
+
+  --sf-font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --sf-font-sans: 'DM Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+}

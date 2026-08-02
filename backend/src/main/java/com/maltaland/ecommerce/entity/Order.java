@@ -47,7 +47,26 @@ public class Order {
     @Column(name = "stripe_payment_intent_id")
     private String stripePaymentIntentId;
 
+    @Column(name = "payment_method", nullable = false, length = 30)
+    private String paymentMethod = "CARD";
+
     private LocalDateTime paidAt;
+
+    private String shippingName;
+
+    private String shippingAddress;
+
+    private String shippingCity;
+
+    private String shippingZip;
+
+    private String shippingCountry;
+
+    private String shippingPhone;
+
+    private LocalDateTime shippedAt;
+
+    private LocalDateTime deliveredAt;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();

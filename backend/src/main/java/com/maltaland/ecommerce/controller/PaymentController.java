@@ -1,5 +1,7 @@
 package com.maltaland.ecommerce.controller;
 
+import com.maltaland.ecommerce.dto.BankTransferRequestDTO;
+import com.maltaland.ecommerce.dto.BankTransferResponseDTO;
 import com.maltaland.ecommerce.dto.PaymentRequestDTO;
 import com.maltaland.ecommerce.dto.PaymentResponseDTO;
 import com.maltaland.ecommerce.service.PaymentService;
@@ -21,5 +23,10 @@ public class PaymentController {
     @PostMapping("/create-payment-intent")
     public ResponseEntity<PaymentResponseDTO> createPaymentIntent(@Valid @RequestBody PaymentRequestDTO dto) {
         return ResponseEntity.ok(paymentService.createPaymentIntent(dto));
+    }
+
+    @PostMapping("/bank-transfer")
+    public ResponseEntity<BankTransferResponseDTO> createBankTransferOrder(@Valid @RequestBody BankTransferRequestDTO dto) {
+        return ResponseEntity.ok(paymentService.createBankTransferOrder(dto));
     }
 }

@@ -1,9 +1,11 @@
 package com.maltaland.ecommerce.controller;
 
 import com.maltaland.ecommerce.dto.OrderResponseDTO;
+import com.maltaland.ecommerce.entity.User;
 import com.maltaland.ecommerce.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,9 +30,27 @@ public class OrderController {
     public ResponseEntity<List<OrderResponseDTO>> getAll(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String email,
+            @RequestParam(required = false) String paymentMethod,
             @RequestParam(required = false) LocalDate start,
             @RequestParam(required = false) LocalDate end) {
-        return ResponseEntity.ok(orderService.findAll(status, email, start, end));
+        return ResponseEntity.ok(orderService.findAll(status, email, paymentMethod, start, end));
+    }
+
+    @GetMapping("/my")
+    public ResponseEntity<List<OrderResponseDTO>> getMyOrders(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(orderService.findByUser(currentUser.getId()));
+    }
+
+    @GetMapping("/transfers/pending")
+    public ResponseEntity<List<OrderResponseDTO>> getPendingTransfers() {
+        return ResponseEntity.ok(orderService.findPendingTransfers());
+    }
+
+    @GetMapping("/track")
+    public ResponseEntity<OrderResponseDTO> trackOrder(
+            @RequestParam Long orderId,
+            @RequestParam String email) {
+        return ResponseEntity.ok(orderService.trackOrder(orderId, email));
     }
 
     @GetMapping("/{id}")

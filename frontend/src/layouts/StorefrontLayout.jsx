@@ -1,15 +1,15 @@
 import { CartProvider } from '../shared/contexts/CartContext';
-import Header from '../shared/components/Header';
-import Footer from '../shared/components/Footer';
+import StorefrontHeader from '../components/storefront/StorefrontHeader';
+import StorefrontFooter from '../components/storefront/StorefrontFooter';
 
 export default function StorefrontLayout({ children }) {
     return (
         <CartProvider>
-            <Header />
-            <main className="main">
-                {children}
-            </main>
-            <Footer />
+            <div className="storefront">
+                <StorefrontHeader />
+                <main className="main">{children}</main>
+                <StorefrontFooter />
+            </div>
         </CartProvider>
     );
 }

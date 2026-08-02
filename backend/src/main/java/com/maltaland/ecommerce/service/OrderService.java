@@ -10,6 +10,8 @@ import com.maltaland.ecommerce.repository.OrderRepository;
 import com.maltaland.ecommerce.repository.ProductRepository;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,17 +39,48 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final OrderMapper orderMapper;
+    private final EmailService emailService;
+    private final EntityManager entityManager;
 
-    public List<OrderResponseDTO> findAll(String status, String email, LocalDate start, LocalDate end) {
+    public List<OrderResponseDTO> findAll(String status, String email, String paymentMethod,
+                                          LocalDate start, LocalDate end) {
         LocalDateTime startDt = start != null ? start.atStartOfDay() : null;
         LocalDateTime endDt = end != null ? end.atTime(LocalTime.MAX) : null;
-        return orderRepository.findByFilters(status, email, startDt, endDt).stream()
+        return orderRepository.findByFilters(status, email, paymentMethod, startDt, endDt).stream()
                 .map(orderMapper::toOrderResponseDTO)
                 .toList();
     }
 
     public OrderResponseDTO findById(Long id) {
         return orderMapper.toOrderResponseDTO(findOrderOrThrow(id));
+    }
+
+    /** Orders placed by the given customer user (for "My orders"). */
+    public List<OrderResponseDTO> findByUser(Long userId) {
+        return orderRepository.findByUser_IdOrderByCreatedAtDesc(userId).stream()
+                .map(orderMapper::toOrderResponseDTO)
+                .toList();
+    }
+
+    /** Pending manual bank-transfer orders waiting for staff to confirm payment. */
+    public List<OrderResponseDTO> findPendingTransfers() {
+        return orderRepository.findByStatusAndPaymentMethodIn("PENDING",
+                        List.of("WISE_TRANSFER", "REVOLUT_TRANSFER")).stream()
+                .map(orderMapper::toOrderResponseDTO)
+                .toList();
+    }
+
+    /**
+     * Guest order tracking: an order id alone acts as the lookup token, but the
+     * email must match the order's customer to avoid leaking order data.
+     */
+    public OrderResponseDTO trackOrder(Long orderId, String email) {
+        Order order = findOrderOrThrow(orderId);
+        if (email == null || email.isBlank()
+                || !email.equalsIgnoreCase(order.getUser().getEmail())) {
+            throw new ResourceNotFoundException("Order not found for the given email and order id");
+        }
+        return orderMapper.toOrderResponseDTO(order);
     }
 
     /**
@@ -57,7 +90,9 @@ public class OrderService {
      * source, this just gives the customer instant confirmation.
      */
     public OrderResponseDTO confirmPayment(Long id) {
-        Order order = findOrderOrThrow(id);
+        // Lock the row from the start: the webhook may confirm the payment while
+        // we verify with Stripe, and both paths must not apply PAID twice.
+        Order order = findOrderForUpdateOrThrow(id);
 
         if ("PAID".equals(order.getStatus())) {
             return orderMapper.toOrderResponseDTO(order);
@@ -87,7 +122,7 @@ public class OrderService {
      * idempotency check. No Stripe API call: the signed event payload is trusted.
      */
     public void markPaidFromWebhook(Long id) {
-        Order order = findOrderOrThrow(id);
+        Order order = findOrderForUpdateOrThrow(id);
         if ("PAID".equals(order.getStatus())) {
             return;
         }
@@ -99,7 +134,7 @@ public class OrderService {
     }
 
     public OrderResponseDTO updateStatus(Long id, String newStatus) {
-        Order order = findOrderOrThrow(id);
+        Order order = findOrderForUpdateOrThrow(id);
         String oldStatus = order.getStatus();
 
         String transition = oldStatus + "->" + newStatus;
@@ -107,6 +142,7 @@ public class OrderService {
             throw new IllegalStateException("Cannot transition from " + oldStatus + " to " + newStatus);
         }
 
+        boolean firstPaid = order.getPaidAt() == null;
         order.setStatus(newStatus);
 
         if ("PAID".equals(newStatus)) {
@@ -117,6 +153,19 @@ public class OrderService {
             if ("PENDING".equals(oldStatus)) {
                 moveReservedToSold(order);
             }
+            if (firstPaid) {
+                emailService.sendOrderPaidAfterCommit(order.getId());
+            }
+        }
+
+        if ("SHIPPED".equals(newStatus) && order.getShippedAt() == null) {
+            order.setShippedAt(LocalDateTime.now());
+            emailService.sendShippedAfterCommit(order.getId());
+        }
+
+        if ("DELIVERED".equals(newStatus) && order.getDeliveredAt() == null) {
+            order.setDeliveredAt(LocalDateTime.now());
+            emailService.sendDeliveredAfterCommit(order.getId());
         }
 
         if ("CANCELLED".equals(newStatus)) {
@@ -126,6 +175,7 @@ public class OrderService {
                 case "SHIPPED" -> restock(order);
                 default -> { /* no inventory movement for other states */ }
             }
+            emailService.sendCancelledAfterCommit(order.getId());
         }
 
         return orderMapper.toOrderResponseDTO(orderRepository.save(order));
@@ -133,18 +183,25 @@ public class OrderService {
 
     /**
      * Reaper job entry point: cancels PENDING orders older than the cutoff and
-     * releases their reserved stock. Races against the webhook are handled by
-     * re-checking status inside the transaction and by optimistic locking on the
-     * Product rows (@Version).
+     * releases their reserved stock. Manual bank-transfer orders are given a much
+     * longer window (transferMinutes) because the customer needs time to complete
+     * the transfer. Races against the webhook are handled by re-checking status
+     * inside the transaction and by optimistic locking on the Product rows
+     * (@Version).
      */
-    public int cancelExpiredPendingOrders(int minutes) {
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(minutes);
+    public int cancelExpiredPendingOrders(int minutes, int transferMinutes) {
+        int longest = Math.max(minutes, transferMinutes);
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(longest);
         List<Order> expired = orderRepository.findByStatusAndCreatedAtBefore("PENDING", cutoff);
 
         int cancelled = 0;
         for (Order order : expired) {
             try {
-                Order fresh = findOrderOrThrow(order.getId());
+                int limit = isBankTransfer(order.getPaymentMethod()) ? transferMinutes : minutes;
+                if (order.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(limit))) {
+                    continue;
+                }
+                Order fresh = findOrderForUpdateOrThrow(order.getId());
                 if (!"PENDING".equals(fresh.getStatus())) {
                     continue; // webhook or admin got there first
                 }
@@ -155,6 +212,10 @@ public class OrderService {
             }
         }
         return cancelled;
+    }
+
+    private boolean isBankTransfer(String paymentMethod) {
+        return "WISE_TRANSFER".equals(paymentMethod) || "REVOLUT_TRANSFER".equals(paymentMethod);
     }
 
     public Map<String, Object> getDashboardStats() {
@@ -178,9 +239,13 @@ public class OrderService {
     }
 
     private void applyPaid(Order order) {
+        boolean firstPaid = order.getPaidAt() == null;
         order.setStatus("PAID");
         order.setPaidAt(LocalDateTime.now());
         moveReservedToSold(order);
+        if (firstPaid) {
+            emailService.sendOrderPaidAfterCommit(order.getId());
+        }
     }
 
     /** PENDING -> PAID: reserved units become sold units. */
@@ -212,5 +277,21 @@ public class OrderService {
     private Order findOrderOrThrow(Long id) {
         return orderRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
+    }
+
+    /**
+     * Like {@link #findOrderOrThrow} but takes a pessimistic write lock on the
+     * row, serializing concurrent transitions so two threads (e.g. the Stripe
+     * webhook and the frontend confirm backstop) cannot both mark the same
+     * PENDING order as PAID and move reserved stock twice. EntityManager.find is
+     * used instead of a JPQL query so an already-managed instance is reused (a
+     * query would throw NonUniqueObjectException for a duplicate managed entity).
+     */
+    private Order findOrderForUpdateOrThrow(Long id) {
+        Order order = entityManager.find(Order.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (order == null) {
+            throw new ResourceNotFoundException("Order not found with id: " + id);
+        }
+        return order;
     }
 }

@@ -24,33 +24,55 @@ function Login() {
     };
 
     return (
-        <div className="auth-page">
-            <h1 className="page-title">Login</h1>
-            <form className="auth-form" onSubmit={handleSubmit}>
-                <input
-                    className="search-input"
-                    type="email"
-                    placeholder="Email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    required
-                />
-                <input
-                    className="search-input"
-                    type="password"
-                    placeholder="Password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required
-                />
-                {error && <p className="auth-error">{error}</p>}
-                <button className="btn" type="submit" disabled={loading}>
-                    {loading ? 'Logging in...' : 'Login'}
-                </button>
-                <p className="auth-link">
-                    Don't have an account? <Link to="/register">Register</Link>
-                </p>
-            </form>
+        <div className="storefront">
+            <div className="sf-auth">
+                <Link to="/" className="sf-auth__logo">
+                    <span className="sf-auth__logo-mark">M</span>
+                    MaltaLand
+                </Link>
+                <div className="sf-auth__card">
+                    <span className="sf-auth__eyebrow">Welcome back</span>
+                    <h1 className="sf-auth__title">Sign in</h1>
+                    <p className="sf-auth__sub">Good to see you again.</p>
+                    <form className="sf-auth__form" onSubmit={handleSubmit}>
+                        <div>
+                            <label className="sf-input__label" htmlFor="login-email">
+                                Email
+                            </label>
+                            <input
+                                id="login-email"
+                                className="sf-input"
+                                type="email"
+                                placeholder="jane@example.com"
+                                value={form.email}
+                                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="sf-input__label" htmlFor="login-password">
+                                Password
+                            </label>
+                            <input
+                                id="login-password"
+                                className="sf-input"
+                                type="password"
+                                placeholder="Your password"
+                                value={form.password}
+                                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                required
+                            />
+                        </div>
+                        {error && <p className="sf-checkout__error">{error}</p>}
+                        <button className="sf-btn sf-btn--primary" type="submit" disabled={loading}>
+                            {loading ? 'Signing in...' : 'Sign in'}
+                        </button>
+                    </form>
+                    <p className="sf-auth__link">
+                        Don't have an account? <Link to="/register">Create one</Link>
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }

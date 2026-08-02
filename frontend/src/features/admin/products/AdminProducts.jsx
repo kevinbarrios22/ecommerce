@@ -10,7 +10,6 @@ function AdminProducts() {
     const [categories, setCategories] = useState([]);
 
     const fetchProducts = () => {
-        setLoading(true);
         api.get('/products?size=100')
             .then((res) => {
                 setProducts(res.data.content);
@@ -75,11 +74,6 @@ function AdminProducts() {
         api.patch(`/products/${id}/toggle-active`)
             .then(fetchProducts)
             .catch((err) => alert(err.response?.data?.message || err.message));
-    };
-
-    const handleSearch = (e) => {
-        e.preventDefault();
-        fetchProducts();
     };
 
     if (loading && products.length === 0) {

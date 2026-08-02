@@ -24,42 +24,70 @@ function Register() {
     };
 
     return (
-        <div className="auth-page">
-            <h1 className="page-title">Register</h1>
-            <form className="auth-form" onSubmit={handleSubmit}>
-                <input
-                    className="search-input"
-                    type="text"
-                    placeholder="Full name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                />
-                <input
-                    className="search-input"
-                    type="email"
-                    placeholder="Email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    required
-                />
-                <input
-                    className="search-input"
-                    type="password"
-                    placeholder="Password (6+ characters)"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required
-                    minLength={6}
-                />
-                {error && <p className="auth-error">{error}</p>}
-                <button className="btn" type="submit" disabled={loading}>
-                    {loading ? 'Creating account...' : 'Register'}
-                </button>
-                <p className="auth-link">
-                    Already have an account? <Link to="/login">Login</Link>
-                </p>
-            </form>
+        <div className="storefront">
+            <div className="sf-auth">
+                <Link to="/" className="sf-auth__logo">
+                    <span className="sf-auth__logo-mark">M</span>
+                    MaltaLand
+                </Link>
+                <div className="sf-auth__card">
+                    <span className="sf-auth__eyebrow">Join the workshop</span>
+                    <h1 className="sf-auth__title">Create your account</h1>
+                    <p className="sf-auth__sub">Save your favourites and check out faster.</p>
+                    <form className="sf-auth__form" onSubmit={handleSubmit}>
+                        <div>
+                            <label className="sf-input__label" htmlFor="register-name">
+                                Full name
+                            </label>
+                            <input
+                                id="register-name"
+                                className="sf-input"
+                                type="text"
+                                placeholder="Jane Doe"
+                                value={form.name}
+                                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="sf-input__label" htmlFor="register-email">
+                                Email
+                            </label>
+                            <input
+                                id="register-email"
+                                className="sf-input"
+                                type="email"
+                                placeholder="jane@example.com"
+                                value={form.email}
+                                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="sf-input__label" htmlFor="register-password">
+                                Password
+                            </label>
+                            <input
+                                id="register-password"
+                                className="sf-input"
+                                type="password"
+                                placeholder="6+ characters"
+                                value={form.password}
+                                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                required
+                                minLength={6}
+                            />
+                        </div>
+                        {error && <p className="sf-checkout__error">{error}</p>}
+                        <button className="sf-btn sf-btn--primary" type="submit" disabled={loading}>
+                            {loading ? 'Creating account...' : 'Create account'}
+                        </button>
+                    </form>
+                    <p className="sf-auth__link">
+                        Already have an account? <Link to="/login">Sign in</Link>
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }

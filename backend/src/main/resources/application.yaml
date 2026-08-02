@@ -10,6 +10,17 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 jwt:
   secret: ${JWT_SECRET:dev-jwt-secret-key-at-least-256-bits-long-for-hs256}
@@ -21,3 +32,14 @@ stripe:
 
 app:
   admin-secret: ${ADMIN_SECRET_KEY:admin-secret-2024}
+  admin-initial-password: ${ADMIN_INITIAL_PASSWORD:}
+  mail-from: ${MAIL_FROM:no-reply@maltaland.mt}
+  bank-transfer:
+    wise:
+      account-holder: MaltaLand Crafts
+      iban: BE65967485643596
+      bic: TRWIBEB1XXX
+    revolut:
+      account-holder: MaltaLand Crafts
+      iban: LT423250099652901880
+      bic: REVOLT21

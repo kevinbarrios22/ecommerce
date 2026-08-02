@@ -13,7 +13,9 @@ api.interceptors.request.use((config) => {
                 config.headers.Authorization = `Bearer ${user.token}`;
             }
         }
-    } catch {}
+    } catch {
+        /* malformed stored session */
+    }
     return config;
 });
 

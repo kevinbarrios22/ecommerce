@@ -6,7 +6,7 @@ Full-stack ecommerce app built with Spring Boot and React.
 
 | Layer       | Tech                                        |
 |-------------|---------------------------------------------|
-| Backend     | Java 17, Spring Boot 3.x, Spring Security, Spring Data JPA |
+| Backend     | Java 21 ,  Spring Boot 3.x, Spring Security, Spring Data JPA |
 | Frontend    | React 19, React Router 7, Vite 8, Axios     |
 | Database    | PostgreSQL 18                                |
 | Payments    | Stripe                                       |
